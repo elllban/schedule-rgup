@@ -1,0 +1,352 @@
+---
+import scheduleJson from '../data/schedule.json';
+import '../styles/global.css';
+
+type EventInfo = {
+  id: string;
+  start: string;
+  end: string;
+  lessonType: string;
+  discipline: string | null;
+  teacher: string | null;
+  room: string | null;
+  onlineLink: string | null;
+};
+type GroupData = { id: string; course: number | null; events: EventInfo[] };
+type ScheduleData = {
+  meta: {
+    academicYear: string;
+    semester: string;
+    period: { from: string; to: string };
+    sourceUrl: string;
+  };
+  groups: GroupData[];
+  occurrences: { groupId: string; date: string; start: string; end: string; eventId: string }[];
+};
+
+const schedule = scheduleJson as ScheduleData;
+
+// Собираем плоский словарь событий, чтобы по eventId в occurrences
+// доставать дисциплину, преподавателя, аудиторию и т.д.
+const eventsMap: Record<string, Omit<EventInfo, 'id'>> = {};
+for (const group of schedule.groups) {
+  for (const event of group.events) {
+    eventsMap[event.id] = {
+      start: event.start,
+      end: event.end,
+      lessonType: event.lessonType,
+      discipline: event.discipline,
+      teacher: event.teacher,
+      room: event.room,
+      onlineLink: event.onlineLink,
+    };
+  }
+}
+
+const payload = {
+  meta: schedule.meta,
+  groups: schedule.groups.map((group) => ({ id: group.id, course: group.course })),
+  events: eventsMap,
+  occurrences: schedule.occurrences,
+};
+
+// Экранируем `<`, чтобы JSON не закрыл тег <script>.
+const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
+---
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Расписание ЗСФ РГУП (неофициально)</title>
+    <meta
+      name="description"
+      content="Неофициальное расписание занятий Западно-Сибирского филиала РГУП"
+    />
+  </head>
+  <body class="min-h-screen bg-gray-50 text-gray-900">
+    <header class="border-b border-gray-200 bg-white">
+      <div class="px-4 py-4">
+        <h1 class="text-xl font-bold">Расписание занятий</h1>
+        <p class="text-sm text-gray-500">
+          Западно-Сибирский филиал РГУП · {schedule.meta.academicYear},{' '}
+          {schedule.meta.semester} семестр · неофициальный проект
+        </p>
+      </div>
+    </header>
+
+    <main class="px-4 py-6">
+      <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <label class="flex items-center gap-2 text-sm">
+          <span class="text-gray-600">Группа</span>
+          <select
+            id="group-select"
+            class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium focus:border-blue-500 focus:outline-none"
+          >
+            {schedule.groups.map((group) => (
+              <option value={group.id}>
+                {group.id}{group.course != null ? ` · ${group.course} курс` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div class="flex items-center gap-2">
+          <button id="btn-week" class="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium">Неделя</button>
+          <button
+            id="btn-prev"
+            class="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm"
+            aria-label="Назад">‹</button
+          >
+          <button
+            id="btn-next"
+            class="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm"
+            aria-label="Вперёд">›</button
+          >
+        </div>
+      </div>
+
+      <div id="date-label" class="mb-3 text-lg font-semibold"></div>
+      <div id="period-banner" hidden class="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"></div>
+      <div id="schedule-grid"></div>
+    </main>
+
+    <footer class="border-t border-gray-200 bg-white">
+      <div class="px-4 py-6 text-sm text-gray-500">
+        <p class="mb-1">
+          Неофициальный проект. Расписание может содержать неточности и не является
+          официальным сервисом вуза.
+        </p>
+        <p>
+          Первоисточник:
+          <a
+            href={schedule.meta.sourceUrl}
+            class="text-blue-600 underline"
+            target="_blank"
+            rel="noopener">сайт ЗСФ РГУП</a
+          >
+        </p>
+      </div>
+    </footer>
+
+    <script type="application/json" id="schedule-data" set:html={payloadJson}></script>
+
+    <script>
+      type EventInfo = {
+        start: string;
+        end: string;
+        lessonType: string;
+        discipline: string | null;
+        teacher: string | null;
+        room: string | null;
+        onlineLink: string | null;
+      };
+      type Occurrence = { groupId: string; date: string; start: string; end: string; eventId: string };
+      type Payload = {
+        meta: { period: { from: string; to: string } };
+        groups: { id: string; course: number | null }[];
+        events: Record<string, EventInfo>;
+        occurrences: Occurrence[];
+      };
+
+      const dataElement = document.getElementById('schedule-data');
+      const payload = JSON.parse(dataElement?.textContent ?? '{}') as Payload;
+
+      const WEEKDAYS_FULL = [
+        'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье',
+      ];
+      const MONTHS_GEN = [
+        'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+        'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+      ];
+      const LESSON_TYPE_LABELS: Record<string, string> = {
+        lecture: 'Лекция', seminar: 'Семинар', other: 'Другое',
+      };
+      const TYPE_BADGE: Record<string, string> = {
+        lecture: 'bg-blue-100 text-blue-700',
+        seminar: 'bg-emerald-100 text-emerald-700',
+        other: 'bg-gray-100 text-gray-600',
+      };
+
+      const groupSelect = document.getElementById('group-select') as HTMLSelectElement;
+      const btnWeek = document.getElementById('btn-week') as HTMLButtonElement;
+      const btnPrev = document.getElementById('btn-prev') as HTMLButtonElement;
+      const btnNext = document.getElementById('btn-next') as HTMLButtonElement;
+      const dateLabel = document.getElementById('date-label') as HTMLElement;
+      const periodBanner = document.getElementById('period-banner') as HTMLElement;
+      const grid = document.getElementById('schedule-grid') as HTMLElement;
+
+      function parseDate(value: string): Date {
+        const [year, month, day] = value.split('-').map(Number);
+        return new Date(year, month - 1, day);
+      }
+      function toISODate(value: Date): string {
+        const year = value.getFullYear();
+        const month = String(value.getMonth() + 1).padStart(2, '0');
+        const day = String(value.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+      function startOfDay(value: Date): Date {
+        const result = new Date(value);
+        result.setHours(0, 0, 0, 0);
+        return result;
+      }
+      function addDays(value: Date, amount: number): Date {
+        const result = new Date(value);
+        result.setDate(result.getDate() + amount);
+        return result;
+      }
+      function startOfWeek(value: Date): Date {
+        const result = startOfDay(value);
+        result.setDate(result.getDate() - ((result.getDay() + 6) % 7));
+        return result;
+      }
+      function formatShortDate(value: Date): string {
+        const day = String(value.getDate()).padStart(2, '0');
+        const month = String(value.getMonth() + 1).padStart(2, '0');
+        return `${day}.${month}`;
+      }
+      function formatFullDate(value: Date): string {
+        const weekday = WEEKDAYS_FULL[(value.getDay() + 6) % 7];
+        return `${weekday}, ${value.getDate()} ${MONTHS_GEN[value.getMonth()]} ${value.getFullYear()}`;
+      }
+      function escapeHtml(value: string): string {
+        const map: Record<string, string> = {
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+        };
+        return value.replace(/[&<>"']/g, (char) => map[char]);
+      }
+
+      const occurrencesByGroupDate = new Map<string, Map<string, Occurrence[]>>();
+      for (const occurrence of payload.occurrences) {
+        let byDate = occurrencesByGroupDate.get(occurrence.groupId);
+        if (!byDate) {
+          byDate = new Map();
+          occurrencesByGroupDate.set(occurrence.groupId, byDate);
+        }
+        let list = byDate.get(occurrence.date);
+        if (!list) {
+          list = [];
+          byDate.set(occurrence.date, list);
+        }
+        list.push(occurrence);
+      }
+      for (const byDate of occurrencesByGroupDate.values()) {
+        for (const list of byDate.values()) {
+          list.sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
+        }
+      }
+
+      function getOccurrences(groupId: string, date: string): Occurrence[] {
+        return occurrencesByGroupDate.get(groupId)?.get(date) ?? [];
+      }
+
+      function renderLesson(occurrence: Occurrence): string {
+        const event = payload.events[occurrence.eventId];
+        if (!event) return '';
+        const typeLabel = LESSON_TYPE_LABELS[event.lessonType] ?? event.lessonType;
+        const badge = TYPE_BADGE[event.lessonType] ?? 'bg-gray-100 text-gray-600';
+        return `
+          <div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+            <div class="text-xs font-medium text-gray-500">${escapeHtml(occurrence.start)}–${escapeHtml(occurrence.end)}</div>
+            <div class="mt-0.5 font-semibold text-gray-900">${escapeHtml(event.discipline ?? '—')}</div>
+            ${event.teacher ? `<div class="mt-0.5 text-sm text-gray-600">${escapeHtml(event.teacher)}</div>` : ''}
+            <div class="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-gray-600">
+              <span class="rounded px-1.5 py-0.5 font-medium ${badge}">${escapeHtml(typeLabel)}</span>
+              ${event.room ? `<span>ауд. ${escapeHtml(event.room)}</span>` : ''}
+              ${event.onlineLink
+                ? `<a href="${escapeHtml(event.onlineLink)}" target="_blank" rel="noopener" class="underline hover:text-blue-600">онлайн</a>`
+                : ''}
+            </div>
+          </div>`;
+      }
+
+      function renderDay(date: Date): string {
+        const items = getOccurrences(selectedGroupId, toISODate(date)).map(renderLesson).join('');
+        return items || `<div class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">Нет занятий</div>`;
+      }
+
+      function renderDayColumn(day: Date, index: number): string {
+        const iso = toISODate(day);
+        const items = getOccurrences(selectedGroupId, iso).map(renderLesson).join('');
+        const isToday = iso === toISODate(today);
+        const body = items || `<div class="py-4 text-center text-xs text-gray-400">—</div>`;
+        return `
+          <div class="flex min-w-[190px] flex-1 flex-col gap-2">
+            <button
+              type="button"
+              data-day="${iso}"
+              class="day-header rounded-md px-2 py-1 text-left hover:bg-gray-100"
+            >
+              <div class="text-sm font-semibold ${isToday ? 'text-blue-600' : 'text-gray-700'}">${WEEKDAYS_FULL[index]}</div>
+              <div class="text-xs text-gray-500">${formatShortDate(day)}</div>
+            </button>
+            ${body}
+          </div>`;
+      }
+
+      function renderWeek(date: Date): string {
+        const monday = startOfWeek(date);
+        const columns: string[] = [];
+        for (let i = 0; i < 6; i += 1) {
+          columns.push(renderDayColumn(addDays(monday, i), i));
+        }
+        return `<div class="flex gap-4 overflow-x-auto pb-2">${columns.join('')}</div>`;
+      }
+
+      const ACTIVE_BUTTON = 'border-blue-600 bg-blue-600 text-white';
+      const IDLE_BUTTON = 'border-gray-300 bg-white text-gray-600 hover:bg-gray-100';
+
+      function render(): void {
+        const isDay = view === 'day';
+        const monday = startOfWeek(anchorDate);
+        dateLabel.textContent = isDay
+          ? formatFullDate(anchorDate)
+          : `${formatShortDate(monday)} – ${formatShortDate(addDays(monday, 5))}`;
+        grid.innerHTML = isDay ? renderDay(anchorDate) : renderWeek(anchorDate);
+
+        btnWeek.className = `rounded-md border px-3 py-1.5 text-sm font-medium ${isDay ? IDLE_BUTTON : ACTIVE_BUTTON}`;
+
+        const outOfPeriod = anchorDate < periodFrom || anchorDate > periodTo;
+        periodBanner.hidden = !outOfPeriod;
+        if (outOfPeriod) {
+          periodBanner.textContent = `Дата вне периода расписания (${formatFullDate(periodFrom)} – ${formatFullDate(periodTo)}).`;
+        }
+      }
+
+      const periodFrom = parseDate(payload.meta.period.from);
+      const periodTo = parseDate(payload.meta.period.to);
+      const today = startOfDay(new Date());
+      let selectedGroupId = payload.groups[0]?.id ?? '';
+      let view: 'day' | 'week' = 'week';
+      let anchorDate = today >= periodFrom && today <= periodTo ? today : new Date(periodFrom);
+
+      groupSelect.addEventListener('change', () => {
+        selectedGroupId = groupSelect.value;
+        render();
+      });
+      btnWeek.addEventListener('click', () => {
+        view = 'week';
+        render();
+      });
+      btnPrev.addEventListener('click', () => {
+        anchorDate = addDays(anchorDate, view === 'day' ? -1 : -7);
+        render();
+      });
+      btnNext.addEventListener('click', () => {
+        anchorDate = addDays(anchorDate, view === 'day' ? 1 : 7);
+        render();
+      });
+      grid.addEventListener('click', (event) => {
+        const header = (event.target as HTMLElement).closest('.day-header') as HTMLElement | null;
+        if (header?.dataset.day) {
+          anchorDate = parseDate(header.dataset.day);
+          view = 'day';
+          render();
+        }
+      });
+
+      render();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "schedule-parser"
+version = "0.1.0"
+description = "Парсер расписания ЗСФ РГУП из нормализованного CSV в JSON"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.10,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.8",
+]
+
+[project.scripts]
+schedule-parser = "schedule_parser.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
