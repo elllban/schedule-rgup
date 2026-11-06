@@ -18,6 +18,7 @@ type ScheduleData = {
     academicYear: string;
     semester: string;
     period: { from: string; to: string };
+    parityAnchor: string;
     sourceUrl: string;
   };
   groups: GroupData[];
@@ -66,7 +67,7 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
   </head>
   <body class="min-h-screen bg-gray-50 text-gray-900">
     <header class="border-b border-gray-200 bg-white">
-      <div class="px-4 py-4">
+      <div class="mx-auto max-w-7xl px-4 py-4">
         <h1 class="text-xl font-bold">Расписание занятий</h1>
         <p class="text-sm text-gray-500">
           Западно-Сибирский филиал РГУП · {schedule.meta.academicYear},{' '}
@@ -75,7 +76,7 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
       </div>
     </header>
 
-    <main class="px-4 py-6">
+    <main class="mx-auto max-w-7xl px-4 py-6">
       <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <label class="flex items-center gap-2 text-sm">
           <span class="text-gray-600">Группа</span>
@@ -112,7 +113,7 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
     </main>
 
     <footer class="border-t border-gray-200 bg-white">
-      <div class="px-4 py-6 text-sm text-gray-500">
+      <div class="mx-auto max-w-7xl px-4 py-6 text-sm text-gray-500">
         <p class="mb-1">
           Неофициальный проект. Расписание может содержать неточности и не является
           официальным сервисом вуза.
@@ -143,7 +144,7 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
       };
       type Occurrence = { groupId: string; date: string; start: string; end: string; eventId: string };
       type Payload = {
-        meta: { period: { from: string; to: string } };
+        meta: { period: { from: string; to: string }; parityAnchor: string };
         groups: { id: string; course: number | null }[];
         events: Record<string, EventInfo>;
         occurrences: Occurrence[];
@@ -209,6 +210,11 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
       function formatFullDate(value: Date): string {
         const weekday = WEEKDAYS_FULL[(value.getDay() + 6) % 7];
         return `${weekday}, ${value.getDate()} ${MONTHS_GEN[value.getMonth()]} ${value.getFullYear()}`;
+      }
+      function weekParity(monday: Date): 'чётная' | 'нечётная' {
+        const days = Math.round((monday.getTime() - parityAnchor.getTime()) / 86400000);
+        const weeks = Math.floor(days / 7);
+        return weeks % 2 === 0 ? 'чётная' : 'нечётная';
       }
       function escapeHtml(value: string): string {
         const map: Record<string, string> = {
@@ -302,7 +308,7 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
         const monday = startOfWeek(anchorDate);
         dateLabel.textContent = isDay
           ? formatFullDate(anchorDate)
-          : `${formatShortDate(monday)} – ${formatShortDate(addDays(monday, 5))}`;
+          : `${formatShortDate(monday)} – ${formatShortDate(addDays(monday, 5))} · ${weekParity(monday)}`;
         grid.innerHTML = isDay ? renderDay(anchorDate) : renderWeek(anchorDate);
 
         btnWeek.className = `rounded-md border px-3 py-1.5 text-sm font-medium ${isDay ? IDLE_BUTTON : ACTIVE_BUTTON}`;
@@ -316,6 +322,7 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
 
       const periodFrom = parseDate(payload.meta.period.from);
       const periodTo = parseDate(payload.meta.period.to);
+      const parityAnchor = parseDate(payload.meta.parityAnchor);
       const today = startOfDay(new Date());
       let selectedGroupId = payload.groups[0]?.id ?? '';
       let view: 'day' | 'week' = 'week';

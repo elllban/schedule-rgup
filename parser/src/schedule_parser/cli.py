@@ -170,6 +170,7 @@ def build_schedule(
             academicYear=config.academic_year,
             semester=config.semester,
             period=Period(from_=config.period_from, to=config.period_to),
+            parityAnchor=config.parity_anchor,
             sourceUrl=config.source_url,
             sourceFiles=source_files,
         ),

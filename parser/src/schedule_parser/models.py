@@ -59,6 +59,7 @@ class Meta(BaseModel):
     academicYear: str
     semester: str
     period: Period
+    parityAnchor: date
     sourceUrl: str
     sourceFiles: list[SourceFile] = Field(default_factory=list)
 
