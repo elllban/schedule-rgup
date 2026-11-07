@@ -100,7 +100,7 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
             class="shrink-0 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm"
             aria-label="Предыдущая неделя">‹</button
           >
-          <div id="week-strip" class="flex flex-1 gap-2 overflow-x-auto py-1"></div>
+          <div id="week-strip" class="flex gap-2"></div>
           <button
             id="week-next"
             class="shrink-0 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm"
@@ -127,8 +127,6 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
         <div id="mobile-days" class="mb-4 grid grid-cols-7 gap-1"></div>
         <div id="mobile-schedule"></div>
       </div>
-
-      <div id="period-banner" hidden class="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"></div>
     </main>
 
     <footer class="border-t border-gray-200 bg-white">
@@ -138,8 +136,7 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
           официальным сервисом вуза.
         </p>
         <p>
-          Первоисточник:
-          <a
+          Первоисточник: <a
             href={schedule.meta.sourceUrl}
             class="text-blue-600 underline"
             target="_blank"
@@ -180,10 +177,6 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
         'январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
         'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь',
       ];
-      const MONTHS_GEN = [
-        'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-        'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
-      ];
       const LESSON_TYPE_LABELS: Record<string, string> = {
         lecture: 'Лекция', seminar: 'Семинар', other: 'Другое',
       };
@@ -203,7 +196,6 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
       const mobileLabel = document.getElementById('mobile-label') as HTMLElement;
       const mobileDays = document.getElementById('mobile-days') as HTMLElement;
       const mobileSchedule = document.getElementById('mobile-schedule') as HTMLElement;
-      const periodBanner = document.getElementById('period-banner') as HTMLElement;
 
       function parseDate(value: string): Date {
         const [year, month, day] = value.split('-').map(Number);
@@ -234,10 +226,6 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
         const day = String(value.getDate()).padStart(2, '0');
         const month = String(value.getMonth() + 1).padStart(2, '0');
         return `${day}.${month}`;
-      }
-      function formatFullDate(value: Date): string {
-        const weekday = WEEKDAYS_FULL[(value.getDay() + 6) % 7];
-        return `${weekday}, ${value.getDate()} ${MONTHS_GEN[value.getMonth()]} ${value.getFullYear()}`;
       }
       function weekParity(monday: Date): 'чётная' | 'нечётная' {
         const days = Math.round((monday.getTime() - parityAnchor.getTime()) / 86400000);
@@ -305,26 +293,30 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
       }
 
       function renderWeekStrip(): string {
-        const currentIso = toISODate(weekMonday);
-        return weekList()
-          .map((monday) => {
-            const active = toISODate(monday) === currentIso;
-            const cls = active
-              ? 'border-blue-600 bg-blue-600 text-white'
-              : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-100';
-            return `<button
-              type="button"
-              data-week="${toISODate(monday)}"
-              class="week-btn whitespace-nowrap rounded-md border px-3 py-1.5 text-sm font-medium ${cls}"
-            >${formatShortDate(monday)} · ${weekParity(monday)}</button>`;
-          })
-          .join('');
+        const start = windowStartIndex();
+        const currentIso = toISODate(currentWeek());
+        let html = '';
+        for (let offset = 0; offset < 6; offset += 1) {
+          const index = start + offset;
+          const monday = weeks[index];
+          const active = toISODate(monday) === currentIso;
+          const cls = active
+            ? 'border-blue-600 bg-blue-600 text-white'
+            : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-100';
+          html += `<button
+            type="button"
+            data-index="${index}"
+            class="week-btn whitespace-nowrap rounded-md border px-3 py-1.5 text-sm font-medium ${cls}"
+          >${formatShortDate(monday)} · ${weekParity(monday)}</button>`;
+        }
+        return html;
       }
 
       function renderWeekGrid(): string {
+        const monday = currentWeek();
         const columns: string[] = [];
         for (let i = 0; i < 6; i += 1) {
-          const day = addDays(weekMonday, i);
+          const day = addDays(monday, i);
           const iso = toISODate(day);
           const isToday = iso === toISODate(today);
           const items =
@@ -339,7 +331,7 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
               ${items}
             </div>`);
         }
-        return `<div class="flex gap-4 overflow-x-auto pb-2">${columns.join('')}</div>`;
+        return `<div class="flex gap-4 pb-2">${columns.join('')}</div>`;
       }
 
       function renderMobileDays(): string {
@@ -347,7 +339,7 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
         const selectedIso = toISODate(selectedDay);
         const cells: string[] = [];
         for (let i = 0; i < 7; i += 1) {
-          const day = addDays(weekMonday, i);
+          const day = addDays(currentWeek(), i);
           const iso = toISODate(day);
           const isSelected = iso === selectedIso;
           const isToday = iso === todayIso;
@@ -377,26 +369,26 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
         weekStrip.innerHTML = renderWeekStrip();
         desktopGrid.innerHTML = renderWeekGrid();
 
-        mobileLabel.textContent = `${MONTHS_NOM[weekMonday.getMonth()]} · ${formatShortDate(weekMonday)} – ${formatShortDate(addDays(weekMonday, 6))}`;
+        const monday = currentWeek();
+        mobileLabel.textContent = `${MONTHS_NOM[monday.getMonth()]} · ${formatShortDate(monday)} – ${formatShortDate(addDays(monday, 6))}`;
         mobileDays.innerHTML = renderMobileDays();
         mobileSchedule.innerHTML = renderMobileSchedule();
-
-        const outOfPeriod = weekMonday < startOfWeek(periodFrom) || weekMonday > periodTo;
-        periodBanner.hidden = !outOfPeriod;
-        if (outOfPeriod) {
-          periodBanner.textContent = `Дата вне периода расписания (${formatFullDate(periodFrom)} – ${formatFullDate(periodTo)}).`;
-        }
-
-        const active = weekStrip.querySelector(`.week-btn[data-week="${toISODate(weekMonday)}"]`);
-        active?.scrollIntoView({ inline: 'center', block: 'nearest' });
       }
 
-      function gotoWeek(monday: Date): void {
-        weekMonday = new Date(monday);
-        const todayIso = toISODate(today);
-        const mondayIso = toISODate(weekMonday);
-        const sundayIso = toISODate(addDays(weekMonday, 6));
-        selectedDay = todayIso >= mondayIso && todayIso <= sundayIso ? today : new Date(weekMonday);
+      function currentWeek(): Date {
+        return weeks[selectedIdx];
+      }
+
+      function windowStartIndex(): number {
+        return Math.max(0, Math.min(selectedIdx - 2, weeks.length - 6));
+      }
+
+      function selectWeek(index: number): void {
+        selectedIdx = Math.max(0, Math.min(index, weeks.length - 1));
+        const monday = currentWeek();
+        const mondayIso = toISODate(monday);
+        const sundayIso = toISODate(addDays(monday, 6));
+        selectedDay = todayIso >= mondayIso && todayIso <= sundayIso ? today : new Date(monday);
         render();
       }
 
@@ -404,25 +396,30 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
       const periodTo = parseDate(payload.meta.period.to);
       const parityAnchor = parseDate(payload.meta.parityAnchor);
       const today = startOfDay(new Date());
+      const todayIso = toISODate(today);
+      const weeks = weekList();
+
       let selectedGroupId = payload.groups[0]?.id ?? '';
       const inPeriod = today >= periodFrom && today <= periodTo;
-      let weekMonday = inPeriod ? startOfWeek(today) : startOfWeek(periodFrom);
-      let selectedDay = inPeriod ? today : new Date(weekMonday);
+      const todayMondayIso = toISODate(startOfWeek(today));
+      const foundIndex = weeks.findIndex((monday) => toISODate(monday) === todayMondayIso);
+      let selectedIdx = inPeriod && foundIndex !== -1 ? foundIndex : 0;
+      let selectedDay = inPeriod ? today : new Date(weeks[0]);
 
       groupSelect.addEventListener('change', () => {
         selectedGroupId = groupSelect.value;
         render();
       });
-      weekPrev.addEventListener('click', () => gotoWeek(addDays(weekMonday, -7)));
-      weekNext.addEventListener('click', () => gotoWeek(addDays(weekMonday, 7)));
+      weekPrev.addEventListener('click', () => selectWeek(selectedIdx - 1));
+      weekNext.addEventListener('click', () => selectWeek(selectedIdx + 1));
       weekStrip.addEventListener('click', (event) => {
         const button = (event.target as HTMLElement).closest('.week-btn') as HTMLElement | null;
-        if (button?.dataset.week) {
-          gotoWeek(parseDate(button.dataset.week));
+        if (button?.dataset.index != null) {
+          selectWeek(Number(button.dataset.index));
         }
       });
-      mobilePrev.addEventListener('click', () => gotoWeek(addDays(weekMonday, -7)));
-      mobileNext.addEventListener('click', () => gotoWeek(addDays(weekMonday, 7)));
+      mobilePrev.addEventListener('click', () => selectWeek(selectedIdx - 1));
+      mobileNext.addEventListener('click', () => selectWeek(selectedIdx + 1));
       mobileDays.addEventListener('click', (event) => {
         const button = (event.target as HTMLElement).closest('.day-btn') as HTMLElement | null;
         if (button?.dataset.day) {
