@@ -77,8 +77,8 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
     </header>
 
     <main class="mx-auto max-w-7xl px-4 py-6">
-      <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <label class="flex items-center gap-2 text-sm">
+      <div class="mb-4 flex items-center gap-2 text-sm">
+        <label class="flex items-center gap-2">
           <span class="text-gray-600">Группа</span>
           <select
             id="group-select"
@@ -91,25 +91,44 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
             ))}
           </select>
         </label>
-
-        <div class="flex items-center gap-2">
-          <button id="btn-week" class="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium">Неделя</button>
-          <button
-            id="btn-prev"
-            class="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm"
-            aria-label="Назад">‹</button
-          >
-          <button
-            id="btn-next"
-            class="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm"
-            aria-label="Вперёд">›</button
-          >
-        </div>
       </div>
 
-      <div id="date-label" class="mb-3 text-lg font-semibold"></div>
+      <div id="desktop" class="hidden md:block">
+        <div class="mb-4 flex items-center gap-2">
+          <button
+            id="week-prev"
+            class="shrink-0 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm"
+            aria-label="Предыдущая неделя">‹</button
+          >
+          <div id="week-strip" class="flex flex-1 gap-2 overflow-x-auto py-1"></div>
+          <button
+            id="week-next"
+            class="shrink-0 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm"
+            aria-label="Следующая неделя">›</button
+          >
+        </div>
+        <div id="desktop-grid"></div>
+      </div>
+
+      <div id="mobile" class="md:hidden">
+        <div class="mb-3 flex items-center justify-between gap-2">
+          <button
+            id="mobile-prev"
+            class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm"
+            aria-label="Предыдущая неделя">‹</button
+          >
+          <div id="mobile-label" class="text-base font-semibold"></div>
+          <button
+            id="mobile-next"
+            class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm"
+            aria-label="Следующая неделя">›</button
+          >
+        </div>
+        <div id="mobile-days" class="mb-4 grid grid-cols-7 gap-1"></div>
+        <div id="mobile-schedule"></div>
+      </div>
+
       <div id="period-banner" hidden class="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"></div>
-      <div id="schedule-grid"></div>
     </main>
 
     <footer class="border-t border-gray-200 bg-white">
@@ -153,8 +172,13 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
       const dataElement = document.getElementById('schedule-data');
       const payload = JSON.parse(dataElement?.textContent ?? '{}') as Payload;
 
+      const WEEKDAYS_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
       const WEEKDAYS_FULL = [
         'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье',
+      ];
+      const MONTHS_NOM = [
+        'январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
+        'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь',
       ];
       const MONTHS_GEN = [
         'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
@@ -170,12 +194,16 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
       };
 
       const groupSelect = document.getElementById('group-select') as HTMLSelectElement;
-      const btnWeek = document.getElementById('btn-week') as HTMLButtonElement;
-      const btnPrev = document.getElementById('btn-prev') as HTMLButtonElement;
-      const btnNext = document.getElementById('btn-next') as HTMLButtonElement;
-      const dateLabel = document.getElementById('date-label') as HTMLElement;
+      const weekPrev = document.getElementById('week-prev') as HTMLButtonElement;
+      const weekNext = document.getElementById('week-next') as HTMLButtonElement;
+      const weekStrip = document.getElementById('week-strip') as HTMLElement;
+      const desktopGrid = document.getElementById('desktop-grid') as HTMLElement;
+      const mobilePrev = document.getElementById('mobile-prev') as HTMLButtonElement;
+      const mobileNext = document.getElementById('mobile-next') as HTMLButtonElement;
+      const mobileLabel = document.getElementById('mobile-label') as HTMLElement;
+      const mobileDays = document.getElementById('mobile-days') as HTMLElement;
+      const mobileSchedule = document.getElementById('mobile-schedule') as HTMLElement;
       const periodBanner = document.getElementById('period-banner') as HTMLElement;
-      const grid = document.getElementById('schedule-grid') as HTMLElement;
 
       function parseDate(value: string): Date {
         const [year, month, day] = value.split('-').map(Number);
@@ -267,57 +295,109 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
           </div>`;
       }
 
-      function renderDay(date: Date): string {
-        const items = getOccurrences(selectedGroupId, toISODate(date)).map(renderLesson).join('');
-        return items || `<div class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">Нет занятий</div>`;
+      function weekList(): Date[] {
+        const first = startOfWeek(periodFrom);
+        const result: Date[] = [];
+        for (let monday = new Date(first); monday <= periodTo; monday = addDays(monday, 7)) {
+          result.push(new Date(monday));
+        }
+        return result;
       }
 
-      function renderDayColumn(day: Date, index: number): string {
-        const iso = toISODate(day);
-        const items = getOccurrences(selectedGroupId, iso).map(renderLesson).join('');
-        const isToday = iso === toISODate(today);
-        const body = items || `<div class="py-4 text-center text-xs text-gray-400">—</div>`;
-        return `
-          <div class="flex min-w-[190px] flex-1 flex-col gap-2">
-            <button
+      function renderWeekStrip(): string {
+        const currentIso = toISODate(weekMonday);
+        return weekList()
+          .map((monday) => {
+            const active = toISODate(monday) === currentIso;
+            const cls = active
+              ? 'border-blue-600 bg-blue-600 text-white'
+              : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-100';
+            return `<button
               type="button"
-              data-day="${iso}"
-              class="day-header rounded-md px-2 py-1 text-left hover:bg-gray-100"
-            >
-              <div class="text-sm font-semibold ${isToday ? 'text-blue-600' : 'text-gray-700'}">${WEEKDAYS_FULL[index]}</div>
-              <div class="text-xs text-gray-500">${formatShortDate(day)}</div>
-            </button>
-            ${body}
-          </div>`;
+              data-week="${toISODate(monday)}"
+              class="week-btn whitespace-nowrap rounded-md border px-3 py-1.5 text-sm font-medium ${cls}"
+            >${formatShortDate(monday)} · ${weekParity(monday)}</button>`;
+          })
+          .join('');
       }
 
-      function renderWeek(date: Date): string {
-        const monday = startOfWeek(date);
+      function renderWeekGrid(): string {
         const columns: string[] = [];
         for (let i = 0; i < 6; i += 1) {
-          columns.push(renderDayColumn(addDays(monday, i), i));
+          const day = addDays(weekMonday, i);
+          const iso = toISODate(day);
+          const isToday = iso === toISODate(today);
+          const items =
+            getOccurrences(selectedGroupId, iso).map(renderLesson).join('') ||
+            '<div class="py-4 text-center text-xs text-gray-400">—</div>';
+          columns.push(`
+            <div class="flex min-w-[190px] flex-1 flex-col gap-2">
+              <div class="px-2 py-1">
+                <div class="text-sm font-semibold ${isToday ? 'text-blue-600' : 'text-gray-700'}">${WEEKDAYS_FULL[i]}</div>
+                <div class="text-xs text-gray-500">${formatShortDate(day)}</div>
+              </div>
+              ${items}
+            </div>`);
         }
         return `<div class="flex gap-4 overflow-x-auto pb-2">${columns.join('')}</div>`;
       }
 
-      const ACTIVE_BUTTON = 'border-blue-600 bg-blue-600 text-white';
-      const IDLE_BUTTON = 'border-gray-300 bg-white text-gray-600 hover:bg-gray-100';
+      function renderMobileDays(): string {
+        const todayIso = toISODate(today);
+        const selectedIso = toISODate(selectedDay);
+        const cells: string[] = [];
+        for (let i = 0; i < 7; i += 1) {
+          const day = addDays(weekMonday, i);
+          const iso = toISODate(day);
+          const isSelected = iso === selectedIso;
+          const isToday = iso === todayIso;
+          const cls = isSelected
+            ? 'border-blue-600 bg-blue-600 text-white'
+            : 'border-gray-300 bg-white text-gray-700';
+          const numberCls = isSelected ? 'text-white' : isToday ? 'text-blue-600' : 'text-gray-800';
+          cells.push(`
+            <button
+              type="button"
+              data-day="${iso}"
+              class="day-btn flex flex-col items-center rounded-md border py-1.5 ${cls}"
+            >
+              <span class="text-[11px] leading-none ${isSelected ? 'text-blue-100' : 'text-gray-500'}">${WEEKDAYS_SHORT[i]}</span>
+              <span class="mt-1 text-sm font-semibold ${numberCls}">${day.getDate()}</span>
+            </button>`);
+        }
+        return cells.join('');
+      }
+
+      function renderMobileSchedule(): string {
+        const items = getOccurrences(selectedGroupId, toISODate(selectedDay)).map(renderLesson).join('');
+        return items || '<div class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">Нет занятий</div>';
+      }
 
       function render(): void {
-        const isDay = view === 'day';
-        const monday = startOfWeek(anchorDate);
-        dateLabel.textContent = isDay
-          ? formatFullDate(anchorDate)
-          : `${formatShortDate(monday)} – ${formatShortDate(addDays(monday, 5))} · ${weekParity(monday)}`;
-        grid.innerHTML = isDay ? renderDay(anchorDate) : renderWeek(anchorDate);
+        weekStrip.innerHTML = renderWeekStrip();
+        desktopGrid.innerHTML = renderWeekGrid();
 
-        btnWeek.className = `rounded-md border px-3 py-1.5 text-sm font-medium ${isDay ? IDLE_BUTTON : ACTIVE_BUTTON}`;
+        mobileLabel.textContent = `${MONTHS_NOM[weekMonday.getMonth()]} · ${formatShortDate(weekMonday)} – ${formatShortDate(addDays(weekMonday, 6))}`;
+        mobileDays.innerHTML = renderMobileDays();
+        mobileSchedule.innerHTML = renderMobileSchedule();
 
-        const outOfPeriod = anchorDate < periodFrom || anchorDate > periodTo;
+        const outOfPeriod = weekMonday < startOfWeek(periodFrom) || weekMonday > periodTo;
         periodBanner.hidden = !outOfPeriod;
         if (outOfPeriod) {
           periodBanner.textContent = `Дата вне периода расписания (${formatFullDate(periodFrom)} – ${formatFullDate(periodTo)}).`;
         }
+
+        const active = weekStrip.querySelector(`.week-btn[data-week="${toISODate(weekMonday)}"]`);
+        active?.scrollIntoView({ inline: 'center', block: 'nearest' });
+      }
+
+      function gotoWeek(monday: Date): void {
+        weekMonday = new Date(monday);
+        const todayIso = toISODate(today);
+        const mondayIso = toISODate(weekMonday);
+        const sundayIso = toISODate(addDays(weekMonday, 6));
+        selectedDay = todayIso >= mondayIso && todayIso <= sundayIso ? today : new Date(weekMonday);
+        render();
       }
 
       const periodFrom = parseDate(payload.meta.period.from);
@@ -325,30 +405,28 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
       const parityAnchor = parseDate(payload.meta.parityAnchor);
       const today = startOfDay(new Date());
       let selectedGroupId = payload.groups[0]?.id ?? '';
-      let view: 'day' | 'week' = 'week';
-      let anchorDate = today >= periodFrom && today <= periodTo ? today : new Date(periodFrom);
+      const inPeriod = today >= periodFrom && today <= periodTo;
+      let weekMonday = inPeriod ? startOfWeek(today) : startOfWeek(periodFrom);
+      let selectedDay = inPeriod ? today : new Date(weekMonday);
 
       groupSelect.addEventListener('change', () => {
         selectedGroupId = groupSelect.value;
         render();
       });
-      btnWeek.addEventListener('click', () => {
-        view = 'week';
-        render();
+      weekPrev.addEventListener('click', () => gotoWeek(addDays(weekMonday, -7)));
+      weekNext.addEventListener('click', () => gotoWeek(addDays(weekMonday, 7)));
+      weekStrip.addEventListener('click', (event) => {
+        const button = (event.target as HTMLElement).closest('.week-btn') as HTMLElement | null;
+        if (button?.dataset.week) {
+          gotoWeek(parseDate(button.dataset.week));
+        }
       });
-      btnPrev.addEventListener('click', () => {
-        anchorDate = addDays(anchorDate, view === 'day' ? -1 : -7);
-        render();
-      });
-      btnNext.addEventListener('click', () => {
-        anchorDate = addDays(anchorDate, view === 'day' ? 1 : 7);
-        render();
-      });
-      grid.addEventListener('click', (event) => {
-        const header = (event.target as HTMLElement).closest('.day-header') as HTMLElement | null;
-        if (header?.dataset.day) {
-          anchorDate = parseDate(header.dataset.day);
-          view = 'day';
+      mobilePrev.addEventListener('click', () => gotoWeek(addDays(weekMonday, -7)));
+      mobileNext.addEventListener('click', () => gotoWeek(addDays(weekMonday, 7)));
+      mobileDays.addEventListener('click', (event) => {
+        const button = (event.target as HTMLElement).closest('.day-btn') as HTMLElement | null;
+        if (button?.dataset.day) {
+          selectedDay = parseDate(button.dataset.day);
           render();
         }
       });
