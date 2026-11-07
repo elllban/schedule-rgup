@@ -94,7 +94,7 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
       </div>
 
       <div id="desktop" class="hidden md:block">
-        <div class="mb-4 flex items-center gap-2">
+        <div class="mb-4 flex items-center justify-center gap-2">
           <button
             id="week-prev"
             class="shrink-0 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm"
@@ -293,7 +293,7 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
       }
 
       function renderWeekStrip(): string {
-        const start = windowStartIndex();
+        const start = windowStartIdx;
         const currentIso = toISODate(currentWeek());
         let html = '';
         for (let offset = 0; offset < 6; offset += 1) {
@@ -379,10 +379,6 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
         return weeks[selectedIdx];
       }
 
-      function windowStartIndex(): number {
-        return Math.max(0, Math.min(selectedIdx - 2, weeks.length - 6));
-      }
-
       function selectWeek(index: number): void {
         selectedIdx = Math.max(0, Math.min(index, weeks.length - 1));
         const monday = currentWeek();
@@ -405,13 +401,20 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
       const foundIndex = weeks.findIndex((monday) => toISODate(monday) === todayMondayIso);
       let selectedIdx = inPeriod && foundIndex !== -1 ? foundIndex : 0;
       let selectedDay = inPeriod ? today : new Date(weeks[0]);
+      let windowStartIdx = Math.max(0, Math.min(selectedIdx - 2, weeks.length - 6));
 
       groupSelect.addEventListener('change', () => {
         selectedGroupId = groupSelect.value;
         render();
       });
-      weekPrev.addEventListener('click', () => selectWeek(selectedIdx - 1));
-      weekNext.addEventListener('click', () => selectWeek(selectedIdx + 1));
+      weekPrev.addEventListener('click', () => {
+        windowStartIdx = Math.max(0, windowStartIdx - 1);
+        render();
+      });
+      weekNext.addEventListener('click', () => {
+        windowStartIdx = Math.min(weeks.length - 6, windowStartIdx + 1);
+        render();
+      });
       weekStrip.addEventListener('click', (event) => {
         const button = (event.target as HTMLElement).closest('.week-btn') as HTMLElement | null;
         if (button?.dataset.index != null) {
