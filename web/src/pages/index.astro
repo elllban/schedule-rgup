@@ -130,7 +130,9 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
           >
         </div>
         <div id="mobile-days" class="mb-4 grid grid-cols-6 gap-1"></div>
-        <div id="mobile-schedule"></div>
+        <div class="overflow-x-hidden">
+          <div id="mobile-schedule"></div>
+        </div>
       </div>
     </main>
 
@@ -357,7 +359,7 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
             <button
               type="button"
               data-day="${iso}"
-              class="day-btn flex flex-col items-center rounded-md border py-1.5 ${cls}"
+              class="day-btn flex flex-col items-center rounded-md border py-1.5 transition-colors duration-150 ${cls}"
             >
               <span class="text-[11px] leading-none ${isSelected ? 'text-blue-100' : 'text-gray-500'}">${WEEKDAYS_SHORT[i]}</span>
               <span class="mt-1 text-sm font-semibold ${numberCls}">${day.getDate()}</span>
@@ -408,7 +410,17 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
       function shiftDay(delta: number): void {
         let target = addDays(selectedDay, delta);
         if (target.getDay() === 0) target = addDays(target, delta);
+        if (target < periodFrom) target = new Date(periodFrom);
+        if (target > periodTo) target = new Date(periodTo);
+        const changed = toISODate(target) !== toISODate(selectedDay);
         goToDay(target);
+        if (changed) playScheduleAnimation(delta > 0 ? 'next' : 'prev');
+      }
+
+      function playScheduleAnimation(direction: 'next' | 'prev'): void {
+        mobileSchedule.classList.remove('day-enter-next', 'day-enter-prev');
+        void mobileSchedule.offsetWidth;
+        mobileSchedule.classList.add(direction === 'next' ? 'day-enter-next' : 'day-enter-prev');
       }
 
       const periodFrom = parseDate(payload.meta.period.from);
