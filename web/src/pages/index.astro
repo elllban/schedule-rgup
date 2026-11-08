@@ -130,7 +130,7 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
           >
         </div>
         <div id="mobile-days" class="mb-4 grid grid-cols-6 gap-1"></div>
-        <div class="overflow-x-hidden">
+        <div class="relative overflow-hidden">
           <div id="mobile-schedule"></div>
         </div>
       </div>
@@ -378,7 +378,7 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
         desktopGrid.innerHTML = renderWeekGrid();
 
         const monday = currentWeek();
-        mobileLabel.textContent = `${MONTHS_NOM[monday.getMonth()]} · ${formatShortDate(monday)} – ${formatShortDate(addDays(monday, 5))} · ${weekParity(monday)}`;
+        mobileLabel.textContent = `${MONTHS_NOM[monday.getMonth()]} · ${weekParity(monday)}`;
         mobileDays.innerHTML = renderMobileDays();
         mobileSchedule.innerHTML = renderMobileSchedule();
       }
@@ -407,20 +407,50 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
         render();
       }
 
+      let slideInProgress = false;
+
       function shiftDay(delta: number): void {
+        if (slideInProgress) return;
         let target = addDays(selectedDay, delta);
         if (target.getDay() === 0) target = addDays(target, delta);
         if (target < periodFrom) target = new Date(periodFrom);
         if (target > periodTo) target = new Date(periodTo);
-        const changed = toISODate(target) !== toISODate(selectedDay);
+        if (toISODate(target) === toISODate(selectedDay)) return;
+        const oldHtml = mobileSchedule.innerHTML;
         goToDay(target);
-        if (changed) playScheduleAnimation(delta > 0 ? 'next' : 'prev');
+        slideDay(delta > 0, oldHtml);
       }
 
-      function playScheduleAnimation(direction: 'next' | 'prev'): void {
-        mobileSchedule.classList.remove('day-enter-next', 'day-enter-prev');
-        void mobileSchedule.offsetWidth;
-        mobileSchedule.classList.add(direction === 'next' ? 'day-enter-next' : 'day-enter-prev');
+      function slideDay(forward: boolean, oldHtml: string): void {
+        const wrapper = mobileSchedule.parentElement;
+        if (!wrapper) return;
+        const oldLayer = document.createElement('div');
+        oldLayer.className = 'absolute inset-0 z-10 bg-gray-50';
+        oldLayer.setAttribute('aria-hidden', 'true');
+        oldLayer.innerHTML = oldHtml;
+        wrapper.appendChild(oldLayer);
+
+        const offset = forward ? 100 : -100;
+        mobileSchedule.animate(
+          [
+            { transform: `translateX(${offset}%)` },
+            { transform: 'translateX(0)' },
+          ],
+          { duration: 250, easing: 'ease-out' },
+        );
+        oldLayer.animate(
+          [
+            { transform: 'translateX(0)' },
+            { transform: `translateX(${-offset}%)` },
+          ],
+          { duration: 250, easing: 'ease-out', fill: 'forwards' },
+        );
+
+        slideInProgress = true;
+        window.setTimeout(() => {
+          oldLayer.remove();
+          slideInProgress = false;
+        }, 250);
       }
 
       const periodFrom = parseDate(payload.meta.period.from);

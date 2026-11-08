@@ -3,35 +3,3 @@
 html {
   scrollbar-gutter: stable;
 }
-
-@media (prefers-reduced-motion: no-preference) {
-  @keyframes day-in-next {
-    from {
-      opacity: 0.4;
-      transform: translateX(28px);
-    }
-    to {
-      opacity: 1;
-      transform: none;
-    }
-  }
-
-  @keyframes day-in-prev {
-    from {
-      opacity: 0.4;
-      transform: translateX(-28px);
-    }
-    to {
-      opacity: 1;
-      transform: none;
-    }
-  }
-
-  .day-enter-next {
-    animation: day-in-next 0.22s ease-out;
-  }
-
-  .day-enter-prev {
-    animation: day-in-prev 0.22s ease-out;
-  }
-}
