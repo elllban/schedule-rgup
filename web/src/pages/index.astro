@@ -102,13 +102,13 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
         <div class="mb-4 flex items-center justify-center gap-2">
           <button
             id="week-prev"
-            class="shrink-0 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm"
+            class="shrink-0 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm hover:bg-gray-100"
             aria-label="Предыдущая неделя">‹</button
           >
           <div id="week-strip" class="flex gap-2"></div>
           <button
             id="week-next"
-            class="shrink-0 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm"
+            class="shrink-0 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm hover:bg-gray-100"
             aria-label="Следующая неделя">›</button
           >
         </div>
@@ -119,17 +119,17 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
         <div class="mb-3 flex items-center justify-between gap-2">
           <button
             id="mobile-prev"
-            class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm"
+            class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-100"
             aria-label="Предыдущая неделя">‹</button
           >
           <div id="mobile-label" class="text-base font-semibold"></div>
           <button
             id="mobile-next"
-            class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm"
+            class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-100"
             aria-label="Следующая неделя">›</button
           >
         </div>
-        <div id="mobile-days" class="mb-4 grid grid-cols-7 gap-1"></div>
+        <div id="mobile-days" class="mb-4 grid grid-cols-6 gap-1"></div>
         <div id="mobile-schedule"></div>
       </div>
     </main>
@@ -201,6 +201,7 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
       const mobileLabel = document.getElementById('mobile-label') as HTMLElement;
       const mobileDays = document.getElementById('mobile-days') as HTMLElement;
       const mobileSchedule = document.getElementById('mobile-schedule') as HTMLElement;
+      const mobile = document.getElementById('mobile') as HTMLElement;
 
       function parseDate(value: string): Date {
         const [year, month, day] = value.split('-').map(Number);
@@ -343,14 +344,14 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
         const todayIso = toISODate(today);
         const selectedIso = toISODate(selectedDay);
         const cells: string[] = [];
-        for (let i = 0; i < 7; i += 1) {
+        for (let i = 0; i < 6; i += 1) {
           const day = addDays(currentWeek(), i);
           const iso = toISODate(day);
           const isSelected = iso === selectedIso;
           const isToday = iso === todayIso;
           const cls = isSelected
             ? 'border-blue-600 bg-blue-600 text-white'
-            : 'border-gray-300 bg-white text-gray-700';
+            : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100';
           const numberCls = isSelected ? 'text-white' : isToday ? 'text-blue-600' : 'text-gray-800';
           cells.push(`
             <button
@@ -375,7 +376,7 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
         desktopGrid.innerHTML = renderWeekGrid();
 
         const monday = currentWeek();
-        mobileLabel.textContent = `${MONTHS_NOM[monday.getMonth()]} · ${formatShortDate(monday)} – ${formatShortDate(addDays(monday, 6))}`;
+        mobileLabel.textContent = `${MONTHS_NOM[monday.getMonth()]} · ${formatShortDate(monday)} – ${formatShortDate(addDays(monday, 5))} · ${weekParity(monday)}`;
         mobileDays.innerHTML = renderMobileDays();
         mobileSchedule.innerHTML = renderMobileSchedule();
       }
@@ -388,9 +389,26 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
         selectedIdx = Math.max(0, Math.min(index, weeks.length - 1));
         const monday = currentWeek();
         const mondayIso = toISODate(monday);
-        const sundayIso = toISODate(addDays(monday, 6));
-        selectedDay = todayIso >= mondayIso && todayIso <= sundayIso ? today : new Date(monday);
+        const saturdayIso = toISODate(addDays(monday, 5));
+        selectedDay = todayIso >= mondayIso && todayIso <= saturdayIso ? today : new Date(monday);
         render();
+      }
+
+      function goToDay(day: Date): void {
+        let target = day;
+        if (target < periodFrom) target = new Date(periodFrom);
+        if (target > periodTo) target = new Date(periodTo);
+        selectedDay = target;
+        const mondayIso = toISODate(startOfWeek(target));
+        const index = weeks.findIndex((monday) => toISODate(monday) === mondayIso);
+        if (index !== -1) selectedIdx = index;
+        render();
+      }
+
+      function shiftDay(delta: number): void {
+        let target = addDays(selectedDay, delta);
+        if (target.getDay() === 0) target = addDays(target, delta);
+        goToDay(target);
       }
 
       const periodFrom = parseDate(payload.meta.period.from);
@@ -435,6 +453,26 @@ const payloadJson = JSON.stringify(payload).replace(/</g, '\\u003c');
           render();
         }
       });
+
+      let touchStartX: number | null = null;
+      mobile.addEventListener(
+        'touchstart',
+        (event) => {
+          touchStartX = event.touches[0].clientX;
+        },
+        { passive: true },
+      );
+      mobile.addEventListener(
+        'touchend',
+        (event) => {
+          if (touchStartX === null) return;
+          const deltaX = event.changedTouches[0].clientX - touchStartX;
+          touchStartX = null;
+          if (Math.abs(deltaX) < 50) return;
+          shiftDay(deltaX < 0 ? 1 : -1);
+        },
+        { passive: true },
+      );
 
       render();
     </script>
